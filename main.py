@@ -1,11 +1,26 @@
-import sqlite3
 import telebot
 from telebot import types
+import sqlite3
+import random
+from Determinations import Determination
+
+
+def get_view_profile_keyboard(user_id, game):
+    keyboard = types.InlineKeyboardMarkup()
+    view_profile_button = types.InlineKeyboardButton(text="Посмотреть профиль",
+                                                     callback_data=f"view_profile_{user_id}_{game}")
+    skip_profile_button = types.InlineKeyboardButton(text="Пропустить", callback_data=f"skip_profile_{user_id}_{game}")
+    keyboard.add(view_profile_button, skip_profile_button)
+    return keyboard
 
 
 class GameFinderBot:
     def __init__(self, token):
+        deter = Determination()
+        self.search_goals = deter.search_goals
+        self.ranks = deter.ranks
         self.bot = telebot.TeleBot(token)
+        self.admins = deter.ranks
         self.con = sqlite3.connect('TeamFiend.db', check_same_thread=False)
 
     def run(self):
@@ -20,60 +35,119 @@ class GameFinderBot:
             self.bot.send_message(message.chat.id, "Привет! Давай начнем поиск напарников. Выбери игру:",
                                   reply_markup=markup)
 
-        @self.bot.message_handler(func=lambda message: message.text.lower() in ["dota 2", "cs2", "rust"])
-        def handle_game_selection(message):
-            game = message.text.lower()
+        @self.bot.message_handler(func=lambda message: message.text == "Редактировать профиль Dota 2")
+        def handle_edit_dota2_profile(message):
+            self.edit_profile(message, "dota 2")
+
+        @self.bot.message_handler(func=lambda message: message.text == "Удалить профиль Dota 2")
+        def handle_delete_dota2_profile(message):
+            self.delete_profile(message, "dota 2")
+
+        @self.bot.message_handler(func=lambda message: message.text == "Редактировать профиль CS2")
+        def handle_edit_cs2_profile(message):
+            self.edit_profile(message, "CS2")
+
+        @self.bot.message_handler(func=lambda message: message.text == "Удалить профиль CS2")
+        def handle_delete_cs2_profile(message):
+            self.delete_profile(message, "CS2")
+
+        @self.bot.message_handler(func=lambda message: message.text == "Редактировать профиль Rust")
+        def handle_edit_rust_profile(message):
+            self.edit_profile(message, "Rust")
+
+        @self.bot.message_handler(func=lambda message: message.text == "Удалить профиль Rust")
+        def handle_delete_rust_profile(message):
+            self.delete_profile(message, "Rust")
+
+        @self.bot.message_handler(func=lambda message: message.text == "Dota 2")
+        def handle_dota2(message):
             user_id = message.from_user.id
             cur = self.con.cursor()
-            cur_id = cur.execute('SELECT id FROM Games WHERE id = ? AND game = ?', (user_id, game)).fetchone()
-            if cur_id is None:
-                if game == "dota 2":
-                    self.create_dota2_profile(message)
+            cur_id = cur.execute('SELECT id FROM Games WHERE id = ? AND game = ?', (user_id, "dota 2")).fetchone()
+            try:
+                print(user_id, cur_id)
+                if user_id != cur_id[0]:
+                    self.create_profile(message, "Dota 2")
                 else:
-                    self.create_profile(message, game)
-            else:
-                if game == "dota 2":
-                    self.show_random_profile(user_id, "dota 2")
+                    search_goal = \
+                        cur.execute('SELECT search_goal FROM Games WHERE id=? AND game = ?',
+                                    (user_id, "dota 2",)).fetchone()[0]
+                    rank = cur.execute('SELECT rank FROM Games WHERE id=? AND game = ?',
+                                       (user_id, "dota 2",)).fetchone()[0]
+                    self.show_random_profile(message, "dota 2", search_goal, rank)
+                    cur.close()
+            except TypeError:
+                self.create_profile(message, "dota 2")
+
+        @self.bot.message_handler(func=lambda message: message.text == "CS2")
+        def handle_cs2(message):
+            user_id = message.from_user.id
+            cur = self.con.cursor()
+            cur_id = cur.execute('SELECT id FROM Games WHERE id = ? AND game = ?', (user_id, "CS2")).fetchone()
+            try:
+                if user_id != cur_id[0]:
+                    self.create_profile(message, "CS2")
                 else:
-                    self.show_random_profile(user_id, game)
-                cur.close()
+                    self.show_random_profile(message, "CS2", None, None)
+                    cur.close()
+            except TypeError:
+                self.create_profile(message, "CS2")
+
+        @self.bot.message_handler(func=lambda message: message.text == "Rust")
+        def handle_rust(message):
+            user_id = message.from_user.id
+            cur = self.con.cursor()
+            cur_id = cur.execute('SELECT id FROM Games WHERE id = ? AND game = ?', (user_id, "Rust")).fetchone()
+            try:
+                if user_id != cur_id[0]:
+                    self.create_profile(message, "Rust")
+                else:
+                    self.show_random_profile(message, "rust", None, None)
+                    cur.close()
+            except TypeError:
+                self.create_profile(message, "rust")
 
         @self.bot.callback_query_handler(func=lambda call: True)
         def handle_inline_buttons(call):
+            cur = self.con.cursor()
             user_id = call.from_user.id
             profile_id = int(call.data.split('_')[-2])
-            game = call.data.split('_')[-1]
             if call.data.startswith("like"):
-                liked_profile = self.get_profile_by_id(profile_id, game)
+                liked_profile = self.get_profile_by_id(profile_id, call.data.split('_')[-1])
                 if liked_profile:
                     if not self.check_if_already_liked(user_id, liked_profile):
                         self.send_matched_profiles(user_id, liked_profile)
+                        self.bot.answer_callback_query(call.id, "")
                     else:
                         self.bot.answer_callback_query(call.id,
                                                        text="Вы уже лайкнули эту анкету. Нельзя лайкать одну анкету "
                                                             "дважды.",
                                                        show_alert=True)
             elif call.data.startswith("dislike"):
-                self.show_random_profile(user_id, game)
+                cur_res = cur.execute('SELECT * FROM Games WHERE id = ? AND game = ?',
+                                      (user_id, call.data.split('_')[-1])).fetchone()
+                cur.close()
+                self.show_random_profile(message=call.message, game=call.data.split('_')[-1], search_goal=cur_res[5],
+                                         rank=cur_res[4])
+                self.bot.answer_callback_query(call.id, "")
             elif call.data.startswith("report"):
                 self.ask_report_reason(user_id, profile_id)
+                self.bot.answer_callback_query(call.id, "")
             elif call.data.startswith("view_profile"):
-                self.send_profile(user_id, self.get_profile_by_id(profile_id, game), game)
+                print(call.data)
+                user_id_to_view = int(call.data.split('_')[-2])
+                game_to_view = call.data.split('_')[-1]
+                self.send_profile(call.message.chat.id, self.get_profile_by_id(user_id_to_view, game_to_view),
+                                  game_to_view)
+                self.bot.answer_callback_query(call.id, "")
             elif call.data.startswith("skip_profile"):
-                self.show_random_profile(user_id, game)
-            elif call.data.startswith("back_to_rank"):
-                self.create_dota2_profile(call.message)
-            elif call.data.startswith("back_to_description"):
-                self.bot.send_message(user_id, "Опишите себя:", reply_markup=types.ReplyKeyboardRemove())
-                self.bot.register_next_step_handler(call.message, self.get_description, {'game': "dota 2"})
-            elif call.data.startswith("back_to_game"):
-                self.bot.send_message(user_id, "Выбери игру:",
-                                      reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True)
-                                      .add(types.KeyboardButton("Dota 2"),
-                                           types.KeyboardButton("CS2"),
-                                           types.KeyboardButton("Rust")))
-            elif call.data.startswith("back_to_rank_selection"):
-                self.create_dota2_profile(call.message)
+                res = cur.execute('SELECT * FROM Games WHERE id = ? AND game = ?',
+                                  (user_id, call.data.split('_')[-1])).fetchone()
+
+                self.show_random_profile(message=call.message, game=call.data.split('_')[-1],
+                                         search_goal=(res[5] if len(res) == 6 else None),
+                                         rank=(res[4] if len(res) == 6 else None))
+                self.bot.answer_callback_query(call.id, "")
 
         self.bot.polling(none_stop=True)
 
@@ -86,137 +160,253 @@ class GameFinderBot:
     def create_profile(self, message, game):
         user_id = message.from_user.id
         user_profile = {'game': game}
-        self.bot.send_message(user_id, "Опишите себя:", reply_markup=types.ReplyKeyboardRemove())
-        self.bot.register_next_step_handler(message, self.get_description, user_profile)
-
-    def create_dota2_profile(self, message):
-        user_id = message.from_user.id
-        user_profile = {'game': "dota 2"}
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        rank_buttons = ["Рекрут", "Страж", "Рыцарь", "Герой", "Легенда", "Властелин", "Божество", "Титан"]
-        for rank in rank_buttons:
-            markup.add(types.KeyboardButton(rank))
-        back_button = types.KeyboardButton("Назад")
-        markup.add(back_button)
-        self.bot.send_message(user_id, "Укажите ваш ранг в Dota 2:", reply_markup=markup)
-        self.bot.register_next_step_handler(message, self.get_rank, user_profile)
-
-    def get_rank(self, message, user_profile):
-        user_id = message.from_user.id
-        rank = message.text
-        if rank not in ["Рекрут", "Страж", "Рыцарь", "Герой", "Легенда", "Властелин", "Божество", "Титан"]:
-            self.bot.send_message(user_id, "Пожалуйста, выберите ранг из предложенных кнопок.")
-            self.create_dota2_profile(message)
-            return
-        user_profile['rank'] = rank
-        user_profile['tg_profile'] = message.from_user.username
-        self.bot.send_message(user_id, "Опишите себя:", reply_markup=types.ReplyKeyboardRemove())
+        self.bot.send_message(user_id, "Опишите себя и свою цель поиска:", reply_markup=types.ReplyKeyboardRemove())
         self.bot.register_next_step_handler(message, self.get_description, user_profile)
 
     def get_description(self, message, user_profile):
         user_id = message.from_user.id
         user_profile['id'] = user_id
-        user_profile['desc'] = message.text
-
-        if user_profile['game'] == "dota 2":
-            self.ask_for_search_criteria(message, user_profile)
-
-    def ask_for_search_criteria(self, message, user_profile):
+        user_profile['description'] = message.text
         user_id = message.from_user.id
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        goals = ["Рекрут-Страж", "Страж-Рыцарь", "Рыцарь-Герой", "Герой-Легенда", "Легенда-Властелин",
-                 "Властелин-Божество", "Божество-Титан"]
-        for goal in goals:
-            markup.add(types.KeyboardButton(goal))
-        back_button = types.KeyboardButton("Назад")
-        markup.add(back_button)
-        self.bot.send_message(user_id, "Выберите свои цели поиска:", reply_markup=markup)
-        self.bot.register_next_step_handler(message, self.get_goals, user_profile)
+        user = message.from_user
+        if user.username:
+            user_profile['username'] = user.username
+            if user_profile['game'] == "dota 2":
+                self.bot.send_message(user_id, "Выберите свой ранг:", reply_markup=self.get_rank_keyboard())
+                self.bot.register_next_step_handler(message, self.get_rank_dota, user_profile)
+            else:
+                cur = self.con.cursor()
+                try:
+                    sqlite_insert_query = """INSERT INTO Games
+                                              (game, id, desc, tg_profile)
+                                              VALUES
+                                              (?, ?, ?, ?);"""
+                    column_values = (tuple(user_profile.values()))
+                    cur.execute(sqlite_insert_query, column_values)
+                    self.con.commit()
+                except Exception:
+                    self.con.rollback()
+                cur.close()
+                self.show_random_profile(message, user_profile["game"], None, None)
+        else:
+            self.bot.send_message(user_id, "Для использования бота, необходимо добавить на свой аккаунт username, "
+                                           "это можно сделать в настройках. Затем создайте аккаунт заново, нажав на "
+                                           "команду /start")
 
-    def get_goals(self, message, user_profile):
+    def edit_profile(self, message, game):
         user_id = message.from_user.id
-        goals = message.text.split("-")
-        user_profile['search_goal'] = "-".join(goals)  # Преобразуем список в строку для вставки в базу данных
-        self.insert_profile(user_profile)
-        self.show_random_profile(user_id, "dota 2")
+        self.bot.send_message(user_id, "Что вы хотите изменить в своем профиле?",
+                              reply_markup=types.ReplyKeyboardRemove())
+        self.bot.register_next_step_handler(message, self.edit_profile_description, game)
 
-    def insert_profile(self, user_profile):
+    def edit_profile_description(self, message, game):
+        user_id = message.from_user.id
+        new_description = message.text
         cur = self.con.cursor()
-        try:
-            sqlite_insert_query = """INSERT INTO Games
-                                      (game, id, desc, tg_profile, rank, search_goal)
-                                      VALUES
-                                      (?, ?, ?, ?, ?, ?);"""
-            column_values = (user_profile['game'], user_profile['id'], user_profile['desc'],
-                             user_profile['tg_profile'], user_profile.get('rank', "Рекрут"),
-                             user_profile.get('search_goal', "Рекрут-Страж"))
-            cur.execute(sqlite_insert_query, column_values)
-            self.con.commit()
-        except Exception as e:
-            print(user_profile)
-            print(f"Failed to insert profile: {e}")
-            self.con.rollback()
+        cur.execute("UPDATE Games SET desc=? WHERE id=? AND game=?", (new_description, user_id, game,))
+        self.con.commit()
         cur.close()
+        self.bot.send_message(user_id, "Профиль успешно обновлен.")
 
-    def show_random_profile(self, user_id, game):
+    def edit_dota_rank(self, message):
+        user_id = message.from_user.id
+        if message.text in self.ranks:
+            new_rank = message.text
+            cur = self.con.cursor()
+            cur.execute("UPDATE Games SET rank=? WHERE id=? AND game=?", (new_rank, user_id, "dota 2",))
+            self.con.commit()
+            cur.close()
+            self.bot.send_message(user_id, "Профиль успешно обновлен.")
+        else:
+            return self.edit_dota_rank(message)
+
+    def edit_dota_search_goal(self, message):
+        user_id = message.from_user.id
+        if message.text in self.search_goals:
+            new_search_goal = message.text
+            cur = self.con.cursor()
+            cur.execute("UPDATE Games SET search_goal=? WHERE id=? AND game=?", (new_search_goal, user_id, "dota 2",))
+            self.con.commit()
+            cur.close()
+            self.bot.send_message(user_id, "Профиль успешно обновлен.")
+        else:
+            return self.edit_dota_rank(message)
+
+    def delete_profile(self, message, game):
+        user_id = message.from_user.id
+        cur = self.con.cursor()
+        cur.execute("DELETE FROM Games WHERE id=? AND game=?", (user_id, game,))
+        self.con.commit()
+        cur.close()
+        self.bot.send_message(user_id, "Профиль успешно удален.")
+
+    def get_rank_keyboard(self):
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        for rank in self.ranks:
+            markup.add(types.KeyboardButton(rank))
+        return markup
+
+    def get_rank_dota(self, message, user_profile):
+        user_id = message.from_user.id
+        if message.text in self.ranks:
+            user_profile['rank'] = message.text
+            self.bot.send_message(user_id, "Выберите цель поиска:", reply_markup=self.get_search_goal_keyboard())
+            self.bot.register_next_step_handler(message, self.get_search_goal, user_profile)
+        else:
+            self.bot.send_message(user_id, "Кажется, такого варианта нет...")
+            self.bot.register_next_step_handler(message, self.get_rank, user_profile)
+
+    def get_search_goal_keyboard(self):
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        for goal in self.search_goals:
+            markup.add(types.KeyboardButton(goal))
+        return markup
+
+    def get_search_goal(self, message, user_profile):
+        user_id = message.from_user.id
+        if message.text in self.search_goals:
+            user_profile['search_goal'] = message.text
+            self.bot.send_message(user_id, "Анкета создана! Теперь вы можете начать поиск напарников.",
+                                  reply_markup=types.ReplyKeyboardRemove())
+            cur = self.con.cursor()
+            try:
+                sqlite_insert_query = """INSERT INTO Games
+                                          (game, id, desc, tg_profile, rank, search_goal)
+                                          VALUES
+                                          (?, ?, ?, ?, ?, ?);"""
+                column_values = (tuple(user_profile.values()))
+                cur.execute(sqlite_insert_query, column_values)
+                self.con.commit()
+            except Exception:
+                self.con.rollback()
+            cur.close()
+            self.show_random_profile(message, user_profile["game"], user_profile["search_goal"],
+                                     user_profile["rank"])
+        else:
+            self.bot.send_message(user_id, "Кажется, такого варианта нет...")
+            self.bot.register_next_step_handler(message, self.get_search_goal, user_profile)
+
+    def get_random_profile_dota(self, user_id, search_goal, rank):
         cursor = self.con.cursor()
+        search_goal = search_goal.split("-")
+        ranks = {"Рекрут": ["Неважно", "Рекрут-Страж"],
+                 "Страж": ["Неважно", "Рекрут-Страж", "Страж-Рыцарь"],
+                 "Рыцарь": ["Неважно", "Страж-Рыцарь", "Рыцарь-Герой"],
+                 "Герой": ["Неважно", "Рыцарь-Герой", "Герой-Легенда"],
+                 "Легенда": ["Неважно", "Герой-Легенда", "Легенда-Властелин"],
+                 "Властелин": ["Неважно", "Легенда-Властелин", "Властелин-Божество"],
+                 "Божество": ["Неважно", "Властелин-Божество", "Божество-Титан"],
+                 "Титан": ["Неважно", "Божество-Титан", "Титан"],
+                 "Нет": ["Неважно"]}
+        cur_rank = ranks[rank]
+        cursor.execute(
+            f"SELECT * FROM Games WHERE game = ? AND id != ? AND rank IN ({', '.join(['?'] * len(search_goal))}) AND "
+            f"search_goal IN ({', '.join(['?'] * len(cur_rank))}) ORDER BY RANDOM() LIMIT 1",
+            ("dota 2", user_id, *search_goal, *cur_rank))
+        res = cursor.fetchone()
+        cursor.close()
+        return res
 
-        # Получаем данные о ранге и цели поиска текущего пользователя
-        user_profile = cursor.execute('SELECT rank, search_goal FROM Games WHERE id = ? AND game = ?',
-                                      (user_id, game)).fetchone()
-        user_rank = user_profile[0]
-        user_search_goal = user_profile[1]
+    def get_random_profile(self, user_id, game):
+        cursor = self.con.cursor()
+        cursor.execute(
+            f"SELECT * FROM Games WHERE game = ? AND id != ? ORDER BY RANDOM() LIMIT 1",
+            (game, user_id,))
+        res = cursor.fetchone()
+        cursor.close()
+        return res
 
-        # Формируем запрос к базе данных с учетом ранга и цели поиска текущего пользователя
-        if user_rank and user_search_goal:
-            # Выбираем профили, учитывая ранг и цель поиска текущего пользователя
-            cursor.execute('SELECT * FROM Games WHERE game = ? AND id != ? ORDER BY RANDOM()', (game, user_id))
-            profiles = cursor.fetchall()
-
-            # Фильтруем профили, чтобы оставить только те, которые соответствуют критериям поиска текущего пользователя
-            valid_profiles = []
-            for profile in profiles:
-                # Проверяем соответствие ранга
-                if profile[4] >= user_rank:  # Если ранг профиля больше или равен рангу пользователя
-                    # Проверяем соответствие цели поиска
-                    if user_search_goal in profile[5]:  # Если цель поиска пользователя входит в цели поиска профиля
-                        valid_profiles.append(profile)
-
-            # Если есть подходящие профили, 0выбираем случайный из них
-            if valid_profiles:
-                random_profile = random.choice(valid_profiles)
-                self.send_profile(user_id, random_profile, game)
-            else:
-                self.bot.send_message(user_id, "Извините, но для Вас больше нет анкет.",
-                                      reply_markup=types.ReplyKeyboardRemove())
+    def show_random_profile(self, message, game, search_goal, rank):
+        user_id = message.chat.id
+        if game == "dota 2":
+            random_profile = self.get_random_profile_dota(user_id, search_goal, rank)
         else:
-            # Если у пользователя отсутствует ранг или цель поиска, просто выбираем случайный профиль
-            cursor.execute('SELECT * FROM Games WHERE game = ? AND id != ? ORDER BY RANDOM() LIMIT 1', (game, user_id))
-            random_profile = cursor.fetchone()
-            cursor.close()
-
-            if random_profile:
-                self.send_profile(user_id, random_profile, game)
-            else:
-                self.bot.send_message(user_id, "Извините, но для Вас больше нет анкет.",
-                                      reply_markup=types.ReplyKeyboardRemove())
-
-    def send_profile(self, user_id, profile, game):
-        description = profile[3]  # Поменяли индекс, так как порядок столбцов изменился в базе данных
-        rank = profile[4]
-        if rank:
-            message_text = f"**Нашли для тебя подходящую анкету:**\n\n**Ранг:** {rank}\n**Описание:** {description}"
+            random_profile = self.get_random_profile(user_id, game)
+        if random_profile:
+            self.send_profile(message.chat.id, random_profile, game)
         else:
-            message_text = f"**Нашли для тебя подходящую анкету:**\n\n**Описание:** {description}"
+            self.bot.send_message(user_id, "Извините, но для Вас больше нет анкет.")
+
+    def send_profile(self, chat_id, profile, game):
+        user_id = profile[1]
+        description = profile[2]
+        rank = None
+        try:
+            rank = profile[4]
+        except Exception:
+            pass
+        game = game
+
         keyboard = types.InlineKeyboardMarkup(row_width=2)
-        like_button = types.InlineKeyboardButton(text="Лайк", callback_data=f"like_{profile[1]}_{game}")
-        dislike_button = types.InlineKeyboardButton(text="Пропустить", callback_data=f"dislike_{game}")
-        report_button = types.InlineKeyboardButton(text="Report", callback_data=f"report_{profile[1]}_{game}")
+        like_button = types.InlineKeyboardButton(text="Лайк", callback_data=f"like_{user_id}_{game}")
+        dislike_button = types.InlineKeyboardButton(text="Пропустить", callback_data=f"dislike_{user_id}_{game}")
+        report_button = types.InlineKeyboardButton(text="Report", callback_data=f"report_{user_id}_{game}")
+
         keyboard.add(like_button, dislike_button, report_button)
-        self.bot.send_message(user_id, message_text, reply_markup=keyboard, parse_mode='Markdown')
+
+        if rank:
+            message_text = f"**Описание:** {description}\n**Ранг:** {rank}"
+        else:
+            message_text = f"**Описание:** {description}\n**Игра:** {game.capitalize()}"
+
+        self.bot.send_message(chat_id, message_text, reply_markup=keyboard, parse_mode='Markdown')
+
+    def get_profile_by_id(self, profile_id, game):
+        cursor = self.con.cursor()
+        cursor.execute('SELECT * FROM Games WHERE game=? AND id=? LIMIT 1', (game, profile_id,))
+        return cursor.fetchone()
+
+    def send_matched_profiles(self, user_id, liked_profile):
+        liked_user_id = liked_profile[1]  # ID пользователя, которого лайкнули
+        game = liked_profile[0]
+        cursor = self.con.cursor()
+        cursor.execute('SELECT * FROM Games WHERE id=? AND game=? LIMIT 1', (user_id, liked_profile[0]))
+        user = cursor.fetchone()
+
+        # Проверим, если пользователь лайкнул взаимно
+        mutual_like_query = ('SELECT * FROM Matches WHERE '
+                             '((user_id=? AND liked_user_id=? AND game=?) OR '
+                             '(user_id=? AND liked_user_id=? AND game=?)) LIMIT 1')
+        cursor.execute(mutual_like_query, (user_id, liked_user_id, game, liked_user_id, user_id, game))
+        mutual_like = cursor.fetchone()
+
+        if mutual_like:
+            # Пользователи лайкнули друг друга
+            self.bot.send_message(user_id, f'Ура! Вы взаимно лайкнулись с пользователем @{liked_profile[3]}\n'
+                                           f'Игра: {liked_profile[0].capitalize()}\nОписание: {liked_profile[2]}!')
+            self.bot.send_message(liked_user_id, f'Ура! Вы взаимно лайкнулись с пользователем @{user[3]}!'
+                                                 f'Игра: {user[0].capitalize()}\nОписание: {user[2]}!')
+            cursor.execute("DELETE FROM Matches WHERE user_id=? or liked_user_id=?", (user_id, user_id,))
+            self.con.commit()
+        else:
+            # Пользователь лайкнул, но взаимного лайка еще нет
+            self.bot.send_message(user_id, f'Вы лайкнули пользователя! '
+                                           'Если он вас тоже лайкнет, вы получите уведомление!')
+
+            # Добавим лайк в базу данных Matches
+            cursor.execute('INSERT INTO Matches (user_id, liked_user_id, game) VALUES (?, ?, ?)',
+                           (user_id, liked_user_id, game,))
+            self.con.commit()
+
+            # Уведомим пользователя, которого лайкнули
+            self.bot.send_message(liked_user_id, f'Кто-то лайкнул Вас'
+                                                 f'\nХотите посмотреть его анкету?',
+                                  reply_markup=get_view_profile_keyboard(user_id, game))
+
+        cursor.close()
+
+    def ask_report_reason(self, user_id, reported_profile_id):
+        self.bot.send_message(user_id, "Выберите причину жалобы.\nПомините, "
+                                       "что за некорректную жалобу Вас могут заблокировать.", reply_markup=None)
+        self.bot.register_next_step_handler(message, self.get_search_goal, user_id, reported_profile_id)
+
+    def send_report_reason(self, message, user_id, reported_profile_id):
+        for i in self.admins:
+            self.bot.send_message(i, f"Пользователь {user_id} написал жалобу на {reported_profile_id}, текст:\n\n"
+                                     f"{message.text}")
 
 
 if __name__ == "__main__":
-    bot_token = ""  # Замените на ваш токен Telegram бота
+    bot_token = ""
     game_finder_bot = GameFinderBot(bot_token)
     game_finder_bot.run()
