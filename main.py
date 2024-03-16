@@ -14,6 +14,24 @@ def get_view_profile_keyboard(user_id, game):
     return keyboard
 
 
+def get_profile_actions_keyboard(game):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    edit_button = types.KeyboardButton(f"Редактировать профиль {game}")
+    delete_button = types.KeyboardButton(f"Удалить профиль {game}")
+    search_button = types.KeyboardButton(f"Начать поиск {game}")
+    keyboard.add(edit_button, delete_button, search_button)
+    return keyboard
+
+
+def get_dota_edits_keyboard():
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    desc = types.KeyboardButton(f"Описание")
+    rank = types.KeyboardButton(f"Ранг")
+    search = types.KeyboardButton(f"Целевые ранги")
+    keyboard.add(desc, rank, search)
+    return keyboard
+
+
 class GameFinderBot:
     def __init__(self, token):
         deter = Determination()
@@ -59,23 +77,38 @@ class GameFinderBot:
         def handle_delete_rust_profile(message):
             self.delete_profile(message, "Rust")
 
+        @self.bot.message_handler(func=lambda message: message.text == "Начать поиск Dota 2")
+        def start_search_dota(message):
+            user_id = message.from_user.id
+            cur = self.con.cursor()
+            search_goal = \
+                cur.execute('SELECT search_goal FROM Games WHERE id=? AND game = ?',
+                            (user_id, "dota 2",)).fetchone()[0]
+            rank = cur.execute('SELECT rank FROM Games WHERE id=? AND game = ?',
+                               (user_id, "dota 2",)).fetchone()[0]
+            cur.close()
+            self.show_random_profile(message, "dota 2", search_goal, rank)
+
+        @self.bot.message_handler(func=lambda message: message.text == "Начать поиск CS2")
+        def start_search_cs(message):
+            self.show_random_profile(message, "CS2", None, None)
+
+        @self.bot.message_handler(func=lambda message: message.text == "Начать поиск Rust")
+        def start_search_cs(message):
+            self.show_random_profile(message, "Rust", None, None)
+
         @self.bot.message_handler(func=lambda message: message.text == "Dota 2")
         def handle_dota2(message):
             user_id = message.from_user.id
             cur = self.con.cursor()
             cur_id = cur.execute('SELECT id FROM Games WHERE id = ? AND game = ?', (user_id, "dota 2")).fetchone()
+            cur.close()
             try:
-                print(user_id, cur_id)
-                if user_id != cur_id[0]:
-                    self.create_profile(message, "Dota 2")
+                if cur_id[0]:
+                    self.bot.send_message(message.chat.id, "Выберите действие:",
+                                          reply_markup=self.get_profile_actions_keyboard("Dota 2"))
                 else:
-                    search_goal = \
-                        cur.execute('SELECT search_goal FROM Games WHERE id=? AND game = ?',
-                                    (user_id, "dota 2",)).fetchone()[0]
-                    rank = cur.execute('SELECT rank FROM Games WHERE id=? AND game = ?',
-                                       (user_id, "dota 2",)).fetchone()[0]
-                    self.show_random_profile(message, "dota 2", search_goal, rank)
-                    cur.close()
+                    self.create_profile(message, "dota 2")
             except TypeError:
                 self.create_profile(message, "dota 2")
 
@@ -195,9 +228,22 @@ class GameFinderBot:
 
     def edit_profile(self, message, game):
         user_id = message.from_user.id
-        self.bot.send_message(user_id, "Что вы хотите изменить в своем профиле?",
-                              reply_markup=types.ReplyKeyboardRemove())
-        self.bot.register_next_step_handler(message, self.edit_profile_description, game)
+        if game == "dota 2":
+            self.bot.send_message(user_id, "Что вы хотите изменить в своем профиле?",
+                                  reply_markup=get_dota_edits_keyboard())
+            self.bot.register_next_step_handler(message, self.choice, game)
+
+    def choice(self, message, game):
+        if message.text == "Описание":
+            self.bot.send_message(user_id, "Введите новое описание:")
+            self.bot.register_next_step_handler(message, self.edit_profile_description, game)
+        if message.text == "Ранг":
+            self.bot.send_message(user_id, "Выберите новый ранг:", reply_markup=self.get_rank_keyboard())
+            self.bot.register_next_step_handler(message, self.edit_dota_rank)
+        if message.text == "Целевые ранги":
+            self.bot.send_message(user_id, "Выберите новые целевые ранги:",
+                                  reply_markup=self.get_search_goal_keyboard())
+            self.bot.register_next_step_handler(message, self.edit_dota_search_goal)
 
     def edit_profile_description(self, message, game):
         user_id = message.from_user.id
@@ -254,7 +300,7 @@ class GameFinderBot:
             self.bot.register_next_step_handler(message, self.get_search_goal, user_profile)
         else:
             self.bot.send_message(user_id, "Кажется, такого варианта нет...")
-            self.bot.register_next_step_handler(message, self.get_rank, user_profile)
+            self.bot.register_next_step_handler(message, self.get_rank_dota, user_profile)
 
     def get_search_goal_keyboard(self):
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -357,13 +403,11 @@ class GameFinderBot:
         return cursor.fetchone()
 
     def send_matched_profiles(self, user_id, liked_profile):
-        liked_user_id = liked_profile[1]  # ID пользователя, которого лайкнули
+        liked_user_id = liked_profile[1]
         game = liked_profile[0]
         cursor = self.con.cursor()
         cursor.execute('SELECT * FROM Games WHERE id=? AND game=? LIMIT 1', (user_id, liked_profile[0]))
         user = cursor.fetchone()
-
-        # Проверим, если пользователь лайкнул взаимно
         mutual_like_query = ('SELECT * FROM Matches WHERE '
                              '((user_id=? AND liked_user_id=? AND game=?) OR '
                              '(user_id=? AND liked_user_id=? AND game=?)) LIMIT 1')
@@ -371,7 +415,6 @@ class GameFinderBot:
         mutual_like = cursor.fetchone()
 
         if mutual_like:
-            # Пользователи лайкнули друг друга
             self.bot.send_message(user_id, f'Ура! Вы взаимно лайкнулись с пользователем @{liked_profile[3]}\n'
                                            f'Игра: {liked_profile[0].capitalize()}\nОписание: {liked_profile[2]}!')
             self.bot.send_message(liked_user_id, f'Ура! Вы взаимно лайкнулись с пользователем @{user[3]}!'
@@ -379,11 +422,9 @@ class GameFinderBot:
             cursor.execute("DELETE FROM Matches WHERE user_id=? or liked_user_id=?", (user_id, user_id,))
             self.con.commit()
         else:
-            # Пользователь лайкнул, но взаимного лайка еще нет
             self.bot.send_message(user_id, f'Вы лайкнули пользователя! '
                                            'Если он вас тоже лайкнет, вы получите уведомление!')
 
-            # Добавим лайк в базу данных Matches
             cursor.execute('INSERT INTO Matches (user_id, liked_user_id, game) VALUES (?, ?, ?)',
                            (user_id, liked_user_id, game,))
             self.con.commit()
