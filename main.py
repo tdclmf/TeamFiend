@@ -35,6 +35,7 @@ def get_dota_edits_keyboard():
 class GameFinderBot:
     def __init__(self, token):
         deter = Determination()
+        self.last_button_click = {}
         self.search_goals = deter.search_goals
         self.ranks = deter.ranks
         self.bot = telebot.TeleBot(token)
@@ -144,6 +145,10 @@ class GameFinderBot:
         def handle_inline_buttons(call):
             cur = self.con.cursor()
             user_id = call.from_user.id
+            if user_id in self.last_button_click and current_time - self.last_button_click[user_id] < 5:
+                self.bot.send_message(user_id, "Подождите немного перед следующим нажатием кнопки.")
+                return
+            self.last_button_click[user_id] = current_time
             profile_id = int(call.data.split('_')[-2])
             if call.data.startswith("like"):
                 liked_profile = self.get_profile_by_id(profile_id, call.data.split('_')[-1])
