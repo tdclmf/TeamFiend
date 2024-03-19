@@ -98,16 +98,19 @@ class GameFinderBot:
                 rank = cur.execute('SELECT rank FROM Games WHERE id=? AND game = ?',
                                    (user_id, "dota 2",)).fetchone()[0]
                 cur.close()
+                self.bot.send_message(message.from_user.id, "Секунду...", reply_markup=types.ReplyKeyboardRemove())
                 self.show_random_profile(message, "dota 2", search_goal, rank)
 
         @self.bot.message_handler(func=lambda message: message.text == "Начать поиск CS2")
         def start_search_cs(message):
             if not self.is_user_banned(message.from_user.id):
+                self.bot.send_message(message.from_user.id, "Секунду...", reply_markup=types.ReplyKeyboardRemove())
                 self.show_random_profile(message, "CS2", None, None)
 
         @self.bot.message_handler(func=lambda message: message.text == "Начать поиск Rust")
         def start_search_cs(message):
             if not self.is_user_banned(message.from_user.id):
+                self.bot.send_message(message.from_user.id, "Секунду...", reply_markup=types.ReplyKeyboardRemove())
                 self.show_random_profile(message, "Rust", None, None)
 
         @self.bot.message_handler(func=lambda message: message.text == "Dota 2")
@@ -524,6 +527,6 @@ class GameFinderBot:
 
 
 if __name__ == "__main__":
-    bot_token = ""
+    bot_token = "6962956089:AAEhQ7MrGYmwB-tUTKdOXUl1zEtSL2Kdcyg"
     game_finder_bot = GameFinderBot(bot_token)
     game_finder_bot.run()
