@@ -313,8 +313,8 @@ class GameFinderBot:
         self.bot.send_message(user_id, "Вы были заблокированы в боте.")
         cursor = self.con.cursor()
         cursor.execute("INSERT INTO BannedUsers (user_id) VALUES (?)", (user_id,))
-        cursor.execure(("DELETE FROM Matches WHERE user_id=?", (user_id,)))
-        cursor.execure(("DELETE FROM Games WHERE id=?", (user_id,)))
+        cursor.execute("DELETE FROM Matches WHERE user_id=?", (user_id,))
+        cursor.execute("DELETE FROM Games WHERE id=?", (user_id,))
         self.con.commit()
         cursor.close()
 
@@ -610,7 +610,7 @@ class GameFinderBot:
                                            f'@{self.bot.get_chat(liked_user_id).username}\n'
                                            f'Игра: {liked_profile[0].capitalize()}\nОписание: {liked_profile[2]}!')
             self.bot.send_message(liked_user_id, f'Ура! Вы взаимно лайкнулись с пользователем '
-                                                 f'@{self.bot.get_chat(user_id).username}!'
+                                                 f'@{self.bot.get_chat(user_id).username}!\n'
                                                  f'Игра: {user[0].capitalize()}\nОписание: {user[1]}!')
             cursor.execute("DELETE FROM Matches WHERE user_id=? or liked_user_id=?", (user_id, user_id,))
             self.con.commit()
@@ -649,6 +649,6 @@ class GameFinderBot:
 
 
 if __name__ == "__main__":
-    bot_token = ""
+    bot_token = "6962956089:AAELSqVUKx3AONikoOMj_GR6dvubJwH7wd8"
     game_finder_bot = GameFinderBot(bot_token)
     game_finder_bot.run()
