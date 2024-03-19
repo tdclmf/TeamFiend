@@ -310,21 +310,23 @@ class GameFinderBot:
         self.bot.polling(none_stop=True)
 
     def ban_user(self, user_id):
-        self.bot.send_message(user_id, "Вы были заблокированы в боте.")
-        cursor = self.con.cursor()
-        cursor.execute("INSERT INTO BannedUsers (user_id) VALUES (?)", (user_id,))
-        cursor.execute("DELETE FROM Matches WHERE user_id=?", (user_id,))
-        cursor.execute("DELETE FROM Games WHERE id=?", (user_id,))
-        self.con.commit()
-        cursor.close()
+        if not self.is_user_banned(user_id):
+            self.bot.send_message(user_id, "Вы были заблокированы в боте.")
+            cur = self.con.cursor()
+            cur.executescript(f"INSERT INTO BannedUsers (user_id) VALUES ({user_id});"
+                              f"DELETE FROM Matches WHERE user_id={user_id};"
+                              f"DELETE FROM Games WHERE id={user_id};")
+            self.con.commit()
+            cur.close()
 
     def unban_user(self, user_id):
-        cursor = self.con.cursor()
-        cursor.execute("DELETE FROM BannedUsers WHERE user_id=?", (user_id,))
-        self.con.commit()
-        cursor.close()
-        self.bot.send_message(user_id, "Ваше блокировка в боте была снята. "
-                                       "Вам необходимо заново создать свои профили!")
+        if self.is_user_banned(user_id):
+            cursor = self.con.cursor()
+            cursor.execute("DELETE FROM BannedUsers WHERE user_id=?", (user_id,))
+            self.con.commit()
+            cursor.close()
+            self.bot.send_message(user_id, "Ваше блокировка в боте была снята. "
+                                           "Вам необходимо заново создать свои профили!")
 
     def is_user_banned(self, user_id):
         cursor = self.con.cursor()
@@ -358,7 +360,7 @@ class GameFinderBot:
         if not self.is_user_banned(user_id):
             log_action(message.from_user.id, "Getting description")
             if message.text == "Вернуться":
-                return
+                self.returned(message)
             user_profile['id'] = user_id
             user_profile['description'] = message.text
             user_id = message.from_user.id
@@ -386,7 +388,7 @@ class GameFinderBot:
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
             if message.text == "Вернуться":
-                return
+                self.returned(message)
             if game == "dota 2":
                 self.bot.send_message(user_id, "Что вы хотите изменить в своем профиле?",
                                       reply_markup=get_dota_edits_keyboard())
@@ -647,8 +649,11 @@ class GameFinderBot:
                                                "https://telegra.ph/Pravila-TeamFiend-03-19",
                               reply_markup=markup)
 
+    def returned(self, message):
+        self.bot.send_message(message.chat.id, "Принято.", reply_markup=types.ReplyKeyboardRemove())
+
 
 if __name__ == "__main__":
-    bot_token = "6962956089:AAELSqVUKx3AONikoOMj_GR6dvubJwH7wd8"
+    bot_token = ""
     game_finder_bot = GameFinderBot(bot_token)
     game_finder_bot.run()
