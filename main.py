@@ -42,6 +42,22 @@ def get_desc_kb():
     return kb
 
 
+def log_action(user_id, action):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open("bot_logs.txt", "a") as log_file:
+        log_file.write(f"{timestamp} - User {user_id}: {action}\n")
+
+
+def is_rules_accepted(user_id):
+    cursor.execute("SELECT user_id FROM accepted_rules WHERE user_id=?", (user_id,))
+    return cursor.fetchone() is not None
+
+
+def add_user_to_accepted_rules(user_id):
+    cursor.execute("INSERT INTO accepted_rules (user_id) VALUES (?)", (user_id,))
+    conn.commit()
+
+
 class GameFinderBot:
     def __init__(self, token):
         deter = Determination()
@@ -53,9 +69,24 @@ class GameFinderBot:
         self.con = sqlite3.connect('TeamFiend.db', check_same_thread=False)
 
     def run(self):
+
+        @bot.message_handler(func=lambda message: True)
+        def handle_messages(message):
+            user_id = message.from_user.id
+            # Проверяем, принял ли пользователь правила
+            if not is_rules_accepted(user_id):
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton(text="Принять правила", callback_data="accept_rules"))
+                bot.send_message(message.chat.id, "Для использования бота необходимо принять правила. "
+                                                  "https://telegra.ph/Pravila-TeamFiend-03-19",
+                                 reply_markup=markup)
+            else:
+                bot.send_message(message.chat.id, "Привет! Давай начнем использовать бота.")
+
         @self.bot.message_handler(commands=['start'])
         def handle_start(message):
             if not self.is_user_banned(message.from_user.id):
+                log_action(message.from_user.id, "/start command executed")
                 markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
                 item_dota2 = types.KeyboardButton("Dota 2")
                 item_cs2 = types.KeyboardButton("CS2")
@@ -124,6 +155,7 @@ class GameFinderBot:
         def handle_dota2(message):
             user_id = message.from_user.id
             if not self.is_user_banned(user_id):
+                log_action(message.from_user.id, "Handling Dota 2")
                 cur = self.con.cursor()
                 cur_id = cur.execute('SELECT id FROM Games WHERE id = ? AND game = ?', (user_id, "dota 2")).fetchone()
                 cur.close()
@@ -185,6 +217,14 @@ class GameFinderBot:
                     self.bot.reply_to(message, f"Пользователь с ID {user_id} был разблокирован.")
                 else:
                     self.bot.reply_to(message, "Вы забыли указать ID пользователя после команды /unban.")
+
+        @bot.callback_query_handler(func=lambda call: call.data == "accept_rules")
+        def accept_rules_callback(call):
+            user_id = call.from_user.id
+            # Добавляем пользователя в базу данных принявших правила
+            add_user_to_accepted_rules(user_id)
+            # Отправляем сообщение о принятии правил
+            bot.send_message(call.message.chat.id, "Вы успешно приняли правила. Теперь вы можете использовать бота.")
 
         @self.bot.callback_query_handler(func=lambda call: True)
         def handle_inline_buttons(call):
@@ -268,44 +308,47 @@ class GameFinderBot:
         return cursor.fetchone() is not None
 
     def create_profile(self, message, game):
-        user_id = message.from_user.id
+        user = message.from_user
+        user_id = user.id
         if not self.is_user_banned(user_id):
-            user_profile = {'game': game}
-            self.bot.send_message(user_id, "Опишите себя и свою цель поиска:", reply_markup=get_desc_kb())
-            self.bot.register_next_step_handler(message, self.get_description, user_profile)
+            if user.username:
+                log_action(message.from_user.id, "Creating profile")
+                user_profile = {'game': game}
+                self.bot.send_message(user_id, "Опишите себя и свою цель поиска:", reply_markup=get_desc_kb())
+                self.bot.register_next_step_handler(message, self.get_description, user_profile)
+            else:
+                self.bot.send_message(user_id, "Для использования бота, необходимо добавить на свой аккаунт username, "
+                                               "это можно сделать в настройках. Затем создайте аккаунт заново, нажав на"
+                                               "команду /start")
 
     def get_description(self, message, user_profile):
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
+            log_action(message.from_user.id, "Getting description")
             if message.text == "Вернуться":
                 return
             user_profile['id'] = user_id
             user_profile['description'] = message.text
             user_id = message.from_user.id
             user = message.from_user
-            if user.username:
-                user_profile['username'] = user.username
-                if user_profile['game'] == "dota 2":
-                    self.bot.send_message(user_id, "Выберите свой ранг:", reply_markup=self.get_rank_keyboard())
-                    self.bot.register_next_step_handler(message, self.get_rank_dota, user_profile)
-                else:
-                    cur = self.con.cursor()
-                    try:
-                        sqlite_insert_query = """INSERT INTO Games
-                                                  (game, id, desc, tg_profile)
-                                                  VALUES
-                                                  (?, ?, ?, ?);"""
-                        column_values = (tuple(user_profile.values()))
-                        cur.execute(sqlite_insert_query, column_values)
-                        self.con.commit()
-                    except Exception:
-                        self.con.rollback()
-                    cur.close()
-                    self.show_random_profile(message, user_profile["game"], None, None)
+            user_profile['username'] = user.username
+            if user_profile['game'] == "dota 2":
+                self.bot.send_message(user_id, "Выберите свой ранг:", reply_markup=self.get_rank_keyboard())
+                self.bot.register_next_step_handler(message, self.get_rank_dota, user_profile)
             else:
-                self.bot.send_message(user_id, "Для использования бота, необходимо добавить на свой аккаунт username, "
-                                               "это можно сделать в настройках. Затем создайте аккаунт заново, нажав на"
-                                               "команду /start")
+                cur = self.con.cursor()
+                try:
+                    sqlite_insert_query = """INSERT INTO Games
+                                                (game, id, desc, tg_profile)
+                                                VALUES
+                                                (?, ?, ?, ?);"""
+                    column_values = (tuple(user_profile.values()))
+                    cur.execute(sqlite_insert_query, column_values)
+                    self.con.commit()
+                except Exception:
+                    self.con.rollback()
+                cur.close()
+                self.show_random_profile(message, user_profile["game"], None, None)
 
     def edit_profile(self, message, game):
         user_id = message.from_user.id
@@ -543,6 +586,6 @@ class GameFinderBot:
 
 
 if __name__ == "__main__":
-    bot_token = ""
+    bot_token = "6962956089:AAELSqVUKx3AONikoOMj_GR6dvubJwH7wd8"
     game_finder_bot = GameFinderBot(bot_token)
     game_finder_bot.run()
