@@ -49,13 +49,18 @@ def log_action(user_id, action):
 
 
 def is_rules_accepted(user_id):
-    cursor.execute("SELECT user_id FROM accepted_rules WHERE user_id=?", (user_id,))
-    return cursor.fetchone() is not None
+    con = sqlite3.connect('TeamFiend.db', check_same_thread=False)
+    cur = con.cursor().execute("SELECT user_id FROM accepted_rules WHERE user_id=?", (user_id,))
+    return cur.fetchone() is not None
 
 
 def add_user_to_accepted_rules(user_id):
-    cursor.execute("INSERT INTO accepted_rules (user_id) VALUES (?)", (user_id,))
-    conn.commit()
+    con = sqlite3.connect('TeamFiend.db', check_same_thread=False)
+    try:
+        con.cursor().execute("INSERT INTO accepted_rules (user_id) VALUES (?)", (user_id,))
+        con.commit()
+    except Exception:
+        return
 
 
 class GameFinderBot:
@@ -70,18 +75,17 @@ class GameFinderBot:
 
     def run(self):
 
-        @bot.message_handler(func=lambda message: True)
+        @self.bot.message_handler(func=lambda message: True)
         def handle_messages(message):
             user_id = message.from_user.id
-            # Проверяем, принял ли пользователь правила
             if not is_rules_accepted(user_id):
                 markup = types.InlineKeyboardMarkup()
                 markup.add(types.InlineKeyboardButton(text="Принять правила", callback_data="accept_rules"))
-                bot.send_message(message.chat.id, "Для использования бота необходимо принять правила. "
-                                                  "https://telegra.ph/Pravila-TeamFiend-03-19",
-                                 reply_markup=markup)
+                self.bot.send_message(message.chat.id, "Для использования бота необходимо принять правила. "
+                                                       "https://telegra.ph/Pravila-TeamFiend-03-19",
+                                      reply_markup=markup)
             else:
-                bot.send_message(message.chat.id, "Привет! Давай начнем использовать бота.")
+                self.bot.send_message(message.chat.id, "Привет! Давай начнем использовать бота.")
 
         @self.bot.message_handler(commands=['start'])
         def handle_start(message):
@@ -218,13 +222,12 @@ class GameFinderBot:
                 else:
                     self.bot.reply_to(message, "Вы забыли указать ID пользователя после команды /unban.")
 
-        @bot.callback_query_handler(func=lambda call: call.data == "accept_rules")
+        @self.bot.callback_query_handler(func=lambda call: call.data == "accept_rules")
         def accept_rules_callback(call):
             user_id = call.from_user.id
-            # Добавляем пользователя в базу данных принявших правила
             add_user_to_accepted_rules(user_id)
-            # Отправляем сообщение о принятии правил
-            bot.send_message(call.message.chat.id, "Вы успешно приняли правила. Теперь вы можете использовать бота.")
+            self.bot.send_message(call.message.chat.id, "Вы успешно приняли правила. Теперь вы можете использовать "
+                                                        "бота.")
 
         @self.bot.callback_query_handler(func=lambda call: True)
         def handle_inline_buttons(call):
@@ -586,6 +589,6 @@ class GameFinderBot:
 
 
 if __name__ == "__main__":
-    bot_token = ""
+    bot_token = "6962956089:AAELSqVUKx3AONikoOMj_GR6dvubJwH7wd8"
     game_finder_bot = GameFinderBot(bot_token)
     game_finder_bot.run()
