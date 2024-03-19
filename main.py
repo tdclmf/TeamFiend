@@ -586,6 +586,6 @@ class GameFinderBot:
 
 
 if __name__ == "__main__":
-    bot_token = "6962956089:AAELSqVUKx3AONikoOMj_GR6dvubJwH7wd8"
+    bot_token = ""
     game_finder_bot = GameFinderBot(bot_token)
     game_finder_bot.run()
