@@ -238,11 +238,10 @@ class GameFinderBot:
         cursor.close()
 
     def unban_user(self, user_id):
-        if user_id in self.blacklist:
-            cursor.execute("DELETE FROM BannedUsers WHERE user_id=?", (user_id,))
-            self.con.commit()
-            cursor.close()
-            self.bot.send_message(user_id, "Ваше блокировка в боте была снята.")
+        cursor.execute("DELETE FROM BannedUsers WHERE user_id=?", (user_id,))
+        self.con.commit()
+        cursor.close()
+        self.bot.send_message(user_id, "Ваше блокировка в боте была снята.")
 
     def is_user_banned(self, user_id):
         cursor = self.con.cursor()
