@@ -493,10 +493,10 @@ class GameFinderBot:
         mutual_like = cursor.fetchone()
         if mutual_like:
             self.bot.send_message(user_id, f'Ура! Вы взаимно лайкнулись с пользователем '
-                                           f'@{types.get_chat(liked_user_id).username}\n'
+                                           f'@{self.bot.get_chat(liked_user_id).username}\n'
                                            f'Игра: {liked_profile[0].capitalize()}\nОписание: {liked_profile[2]}!')
             self.bot.send_message(liked_user_id, f'Ура! Вы взаимно лайкнулись с пользователем '
-                                                 f'@{types.get_chat(user_id).username}!'
+                                                 f'@{self.bot.get_chat(user_id).username}!'
                                                  f'Игра: {user[0].capitalize()}\nОписание: {user[1]}!')
             cursor.execute("DELETE FROM Matches WHERE user_id=? or liked_user_id=?", (user_id, user_id,))
             self.con.commit()
@@ -522,11 +522,12 @@ class GameFinderBot:
             for i in self.admins:
                 self.bot.send_message(i, f"Пользователь {user_id} написал жалобу на {reported_profile_id}, текст:\n\n"
                                          f"{message.text}")
+            self.bot.send_message(user_id, f"Жалоба отправлена!")
         except Exception as e:
             self.bot.send_message(user_id, f"Произошла ошибка... Отправьте лог администратору бота @mikufagoff\n{e}")
 
 
 if __name__ == "__main__":
-    bot_token = "6962956089:AAEhQ7MrGYmwB-tUTKdOXUl1zEtSL2Kdcyg"
+    bot_token = ""
     game_finder_bot = GameFinderBot(bot_token)
     game_finder_bot.run()
