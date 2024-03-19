@@ -39,7 +39,7 @@ def get_dota_edits_keyboard():
 def get_desc_kb():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     back = types.KeyboardButton("Вернуться")
-    keyboard.add(back)
+    kb.add(back)
     return kb
 
 
@@ -93,7 +93,7 @@ class GameFinderBot:
 
         @self.bot.message_handler(func=lambda message: message.text == "Редактировать профиль Dota 2")
         def handle_edit_dota2_profile(message):
-            if not is_rules_accepted(user_id):
+            if not is_rules_accepted(message.from_user.id):
                 self.not_accept(message)
                 return
             if not self.is_user_banned(message.from_user.id):
@@ -101,7 +101,7 @@ class GameFinderBot:
 
         @self.bot.message_handler(func=lambda message: message.text == "Удалить профиль Dota 2")
         def handle_delete_dota2_profile(message):
-            if not is_rules_accepted(user_id):
+            if not is_rules_accepted(message.from_user.id):
                 self.not_accept(message)
                 return
             if not self.is_user_banned(message.from_user.id):
@@ -109,7 +109,7 @@ class GameFinderBot:
 
         @self.bot.message_handler(func=lambda message: message.text == "Редактировать профиль CS2")
         def handle_edit_cs2_profile(message):
-            if not is_rules_accepted(user_id):
+            if not is_rules_accepted(message.from_user.id):
                 self.not_accept(message)
                 return
             if not self.is_user_banned(message.from_user.id):
@@ -117,7 +117,7 @@ class GameFinderBot:
 
         @self.bot.message_handler(func=lambda message: message.text == "Удалить профиль CS2")
         def handle_delete_cs2_profile(message):
-            if not is_rules_accepted(user_id):
+            if not is_rules_accepted(message.from_user.id):
                 self.not_accept(message)
                 return
             if not self.is_user_banned(message.from_user.id):
@@ -125,7 +125,7 @@ class GameFinderBot:
 
         @self.bot.message_handler(func=lambda message: message.text == "Редактировать профиль Rust")
         def handle_edit_rust_profile(message):
-            if not is_rules_accepted(user_id):
+            if not is_rules_accepted(message.from_user.id):
                 not_accept(message)
                 return
             if not self.is_user_banned(message.from_user.id):
@@ -133,7 +133,7 @@ class GameFinderBot:
 
         @self.bot.message_handler(func=lambda message: message.text == "Удалить профиль Rust")
         def handle_delete_rust_profile(message):
-            if not is_rules_accepted(user_id):
+            if not is_rules_accepted(message.from_user.id):
                 self.not_accept(message)
                 return
             if not self.is_user_banned(message.from_user.id):
@@ -505,20 +505,41 @@ class GameFinderBot:
     def get_random_profile_dota(self, user_id, search_goal, rank):
         cursor = self.con.cursor()
         search_goal = search_goal.split("-")
-        ranks = {"Рекрут": ["Неважно", "Рекрут-Страж"],
-                 "Страж": ["Неважно", "Рекрут-Страж", "Страж-Рыцарь"],
-                 "Рыцарь": ["Неважно", "Страж-Рыцарь", "Рыцарь-Герой"],
-                 "Герой": ["Неважно", "Рыцарь-Герой", "Герой-Легенда"],
-                 "Легенда": ["Неважно", "Герой-Легенда", "Легенда-Властелин"],
-                 "Властелин": ["Неважно", "Легенда-Властелин", "Властелин-Божество"],
-                 "Божество": ["Неважно", "Властелин-Божество", "Божество-Титан"],
-                 "Титан": ["Неважно", "Божество-Титан", "Титан"],
-                 "Нет": ["Неважно"]}
+        ranks = {
+            "Рекрут": ["Неважно", "Рекрут-Страж"],
+            "Страж": ["Неважно", "Рекрут-Страж", "Страж-Рыцарь"],
+            "Рыцарь": ["Неважно", "Страж-Рыцарь", "Рыцарь-Герой"],
+            "Герой": ["Неважно", "Рыцарь-Герой", "Герой-Легенда"],
+            "Легенда": ["Неважно", "Герой-Легенда", "Легенда-Властелин"],
+            "Властелин": ["Неважно", "Легенда-Властелин", "Властелин-Божество"],
+            "Божество": ["Неважно", "Властелин-Божество", "Божество-Титан"],
+            "Титан": ["Неважно", "Божество-Титан", "Титан"],
+            "Нет": ["Неважно"]
+        }
         cur_rank = ranks[rank]
-        cursor.execute(
-            f"SELECT * FROM Games WHERE game = ? AND id != ? AND rank IN ({', '.join(['?'] * len(search_goal))}) AND "
-            f"search_goal IN ({', '.join(['?'] * len(cur_rank))}) ORDER BY RANDOM() LIMIT 1",
-            ("dota 2", user_id, *search_goal, *cur_rank))
+
+        # Проверка наличия "Неважно" в целевых рангах текущего пользователя и другого пользователя
+        if "Неважно" in cur_rank and "Неважно" in search_goal:
+            cursor.execute(
+                f"SELECT * FROM Games WHERE game = ? AND id != ? ORDER BY RANDOM() LIMIT 1",
+                ("dota 2", user_id))
+        elif "Неважно" in cur_rank:
+            cursor.execute(
+                f"SELECT * FROM Games WHERE game = ? AND id != ? AND rank IN "
+                f"({', '.join(['?'] * len(search_goal))}) ORDER BY RANDOM() LIMIT 1",
+                ("dota 2", user_id, *search_goal))
+        elif "Неважно" in search_goal:
+            cursor.execute(
+                f"SELECT * FROM Games WHERE game = ? AND id != ? AND search_goal IN "
+                f"({', '.join(['?'] * len(cur_rank))}) ORDER BY RANDOM() LIMIT 1",
+                ("dota 2", user_id, *cur_rank))
+        else:
+            cursor.execute(
+                f"SELECT * FROM Games WHERE game = ? AND id != ? AND rank IN "
+                f"({', '.join(['?'] * len(search_goal))}) AND search_goal IN "
+                f"({', '.join(['?'] * len(cur_rank))}) ORDER BY RANDOM() LIMIT 1",
+                ("dota 2", user_id, *search_goal, *cur_rank))
+
         res = cursor.fetchone()
         cursor.close()
         return res
@@ -564,6 +585,9 @@ class GameFinderBot:
             else:
                 message_text = f"**Описание:** {description}\n**Игра:** {game.capitalize()}"
             self.bot.send_message(chat_id, message_text, reply_markup=keyboard, parse_mode='Markdown')
+
+    # def returned(self, user_id):
+    #   self.bot.send_message()
 
     def get_profile_by_id(self, profile_id, game):
         cursor = self.con.cursor()
