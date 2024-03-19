@@ -35,6 +35,13 @@ def get_dota_edits_keyboard():
     return keyboard
 
 
+def get_desc_kb():
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    back = types.KeyboardButton("Вернуться")
+    keyboard.add(back)
+    return kb
+
+
 class GameFinderBot:
     def __init__(self, token):
         deter = Determination()
@@ -264,12 +271,14 @@ class GameFinderBot:
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
             user_profile = {'game': game}
-            self.bot.send_message(user_id, "Опишите себя и свою цель поиска:", reply_markup=types.ReplyKeyboardRemove())
+            self.bot.send_message(user_id, "Опишите себя и свою цель поиска:", reply_markup=get_desc_kb())
             self.bot.register_next_step_handler(message, self.get_description, user_profile)
 
     def get_description(self, message, user_profile):
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
+            if message.text == "Вернуться":
+                return
             user_profile['id'] = user_id
             user_profile['description'] = message.text
             user_id = message.from_user.id
@@ -301,6 +310,8 @@ class GameFinderBot:
     def edit_profile(self, message, game):
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
+            if message.text == "Вернуться":
+                return
             if game == "dota 2":
                 self.bot.send_message(user_id, "Что вы хотите изменить в своем профиле?",
                                       reply_markup=get_dota_edits_keyboard())
@@ -371,6 +382,7 @@ class GameFinderBot:
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         for rank in self.ranks:
             markup.add(types.KeyboardButton(rank))
+        markup.add(types.KeyboardButton("Вернуться"))
         return markup
 
     def get_rank_dota(self, message, user_profile):
