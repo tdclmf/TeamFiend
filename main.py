@@ -231,15 +231,24 @@ class GameFinderBot:
 
     def ban_user(self, user_id):
         self.bot.send_message(user_id, "Вы были заблокированы в боте.")
-        self.blacklist.add(user_id)
+        cursor = self.con.cursor()
+        cursor.execute("INSERT INTO BannedUsers (user_id) VALUES (?)", (user_id,))
+        self.con.commit()
+        cursor.close()
 
     def unban_user(self, user_id):
         if user_id in self.blacklist:
-            self.blacklist.remove(user_id)
+            cursor.execute("DELETE FROM BannedUsers WHERE user_id=?", (user_id,))
+            self.con.commit()
+            cursor.close()
             self.bot.send_message(user_id, "Ваше блокировка в боте была снята.")
 
     def is_user_banned(self, user_id):
-        return user_id in self.blacklist
+        cursor = self.con.cursor()
+        cursor.execute("SELECT * FROM BannedUsers WHERE user_id=?", (user_id,))
+        result = cursor.fetchone()
+        cursor.close()
+        return result is not None
 
     def check_if_already_liked(self, user_id, liked_profile):
         cursor = self.con.cursor()
@@ -525,6 +534,6 @@ class GameFinderBot:
 
 
 if __name__ == "__main__":
-    bot_token = "6962956089:AAFuVdkYSV5_bk4I5IzN1otp4UB4CzIn46w"
+    bot_token = ""
     game_finder_bot = GameFinderBot(bot_token)
     game_finder_bot.run()
