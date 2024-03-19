@@ -234,14 +234,18 @@ class GameFinderBot:
         self.bot.send_message(user_id, "Вы были заблокированы в боте.")
         cursor = self.con.cursor()
         cursor.execute("INSERT INTO BannedUsers (user_id) VALUES (?)", (user_id,))
+        cursor.execure(("DELETE FROM Matches WHERE user_id=?", (user_id,)))
+        cursor.execure(("DELETE FROM Games WHERE id=?", (user_id,)))
         self.con.commit()
         cursor.close()
 
     def unban_user(self, user_id):
+        cursor = self.con.cursor()
         cursor.execute("DELETE FROM BannedUsers WHERE user_id=?", (user_id,))
         self.con.commit()
         cursor.close()
-        self.bot.send_message(user_id, "Ваше блокировка в боте была снята.")
+        self.bot.send_message(user_id, "Ваше блокировка в боте была снята. "
+                                       "Вам необходимо заново создать свои профили!")
 
     def is_user_banned(self, user_id):
         cursor = self.con.cursor()
