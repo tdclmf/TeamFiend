@@ -228,6 +228,7 @@ class GameFinderBot:
             add_user_to_accepted_rules(user_id)
             self.bot.send_message(call.message.chat.id, "Вы успешно приняли правила. Теперь вы можете использовать "
                                                         "бота.")
+            self.bot.answer_callback_query(call.id, "")
 
         @self.bot.callback_query_handler(func=lambda call: True)
         def handle_inline_buttons(call):
