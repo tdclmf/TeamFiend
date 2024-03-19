@@ -75,20 +75,11 @@ class GameFinderBot:
 
     def run(self):
 
-        @self.bot.message_handler(func=lambda message: True)
-        def handle_messages(message):
-            user_id = message.from_user.id
-            if not is_rules_accepted(user_id):
-                markup = types.InlineKeyboardMarkup()
-                markup.add(types.InlineKeyboardButton(text="Принять правила", callback_data="accept_rules"))
-                self.bot.send_message(message.chat.id, "Для использования бота необходимо принять правила. "
-                                                       "https://telegra.ph/Pravila-TeamFiend-03-19",
-                                      reply_markup=markup)
-            else:
-                self.bot.send_message(message.chat.id, "Привет! Давай начнем использовать бота.")
-
         @self.bot.message_handler(commands=['start'])
         def handle_start(message):
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(message.from_user.id):
                 log_action(message.from_user.id, "/start command executed")
                 markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -101,37 +92,58 @@ class GameFinderBot:
 
         @self.bot.message_handler(func=lambda message: message.text == "Редактировать профиль Dota 2")
         def handle_edit_dota2_profile(message):
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(message.from_user.id):
                 self.edit_profile(message, "dota 2")
 
         @self.bot.message_handler(func=lambda message: message.text == "Удалить профиль Dota 2")
         def handle_delete_dota2_profile(message):
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(message.from_user.id):
                 self.delete_profile(message, "dota 2")
 
         @self.bot.message_handler(func=lambda message: message.text == "Редактировать профиль CS2")
         def handle_edit_cs2_profile(message):
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(message.from_user.id):
                 self.edit_profile(message, "CS2")
 
         @self.bot.message_handler(func=lambda message: message.text == "Удалить профиль CS2")
         def handle_delete_cs2_profile(message):
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(message.from_user.id):
                 self.delete_profile(message, "CS2")
 
         @self.bot.message_handler(func=lambda message: message.text == "Редактировать профиль Rust")
         def handle_edit_rust_profile(message):
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(message.from_user.id):
                 self.edit_profile(message, "Rust")
 
         @self.bot.message_handler(func=lambda message: message.text == "Удалить профиль Rust")
         def handle_delete_rust_profile(message):
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(message.from_user.id):
                 self.delete_profile(message, "Rust")
 
         @self.bot.message_handler(func=lambda message: message.text == "Начать поиск Dota 2")
         def start_search_dota(message):
             user_id = message.from_user.id
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(user_id):
                 cur = self.con.cursor()
                 search_goal = \
@@ -145,6 +157,9 @@ class GameFinderBot:
 
         @self.bot.message_handler(func=lambda message: message.text == "Начать поиск CS2")
         def start_search_cs(message):
+            if not is_rules_accepted(message.from_user.id):
+                not_accept(message)
+                return
             if not self.is_user_banned(message.from_user.id):
                 self.bot.send_message(message.from_user.id, "Секунду...", reply_markup=types.ReplyKeyboardRemove())
                 self.show_random_profile(message, "CS2", None, None)
@@ -158,6 +173,9 @@ class GameFinderBot:
         @self.bot.message_handler(func=lambda message: message.text == "Dota 2")
         def handle_dota2(message):
             user_id = message.from_user.id
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(user_id):
                 log_action(message.from_user.id, "Handling Dota 2")
                 cur = self.con.cursor()
@@ -175,6 +193,9 @@ class GameFinderBot:
         @self.bot.message_handler(func=lambda message: message.text == "CS2")
         def handle_cs2(message):
             user_id = message.from_user.id
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(user_id):
                 cur = self.con.cursor()
                 cur_id = cur.execute('SELECT id FROM Games WHERE id = ? AND game = ?', (user_id, "CS2")).fetchone()
@@ -190,6 +211,9 @@ class GameFinderBot:
         @self.bot.message_handler(func=lambda message: message.text == "Rust")
         def handle_rust(message):
             user_id = message.from_user.id
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(user_id):
                 cur = self.con.cursor()
                 cur_id = cur.execute('SELECT id FROM Games WHERE id = ? AND game = ?', (user_id, "Rust")).fetchone()
@@ -233,6 +257,9 @@ class GameFinderBot:
         @self.bot.callback_query_handler(func=lambda call: True)
         def handle_inline_buttons(call):
             user_id = call.from_user.id
+            if not is_rules_accepted(user_id):
+                not_accept(message)
+                return
             if not self.is_user_banned(user_id):
                 current_time = time.time()
                 cur = self.con.cursor()
@@ -587,6 +614,13 @@ class GameFinderBot:
             self.bot.send_message(user_id, f"Жалоба отправлена!")
         except Exception as e:
             self.bot.send_message(user_id, f"Произошла ошибка... Отправьте лог администратору бота @mikufagoff\n{e}")
+
+    def not_accept(self, message):
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton(text="Принять правила", callback_data="accept_rules"))
+        self.bot.send_message(message.chat.id, "Для использования бота необходимо принять правила. "
+                                               "https://telegra.ph/Pravila-TeamFiend-03-19",
+                              reply_markup=markup)
 
 
 if __name__ == "__main__":
