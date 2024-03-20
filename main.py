@@ -253,11 +253,16 @@ class GameFinderBot:
 
         @self.bot.callback_query_handler(func=lambda call: call.data == "accept_rules")
         def accept_rules_callback(call):
-            self.bot.answer_callback_query(call.id, "")
-            user_id = call.from_user.id
-            add_user_to_accepted_rules(user_id)
-            self.bot.send_message(call.message.chat.id, "Вы успешно приняли правила. Теперь вы можете использовать "
-                                                        "бота.")
+            if not is_rules_accepted(message.from_user.id):
+                self.bot.answer_callback_query(call.id, "")
+                user_id = call.from_user.id
+                add_user_to_accepted_rules(user_id)
+                self.bot.send_message(call.message.chat.id, "Вы успешно приняли правила. Теперь вы можете использовать "
+                                                            "бота. Нажмите /start")
+            else:
+                self.bot.answer_callback_query(call.id,
+                                               text="Вы уже согласились с нашими правилами. Приятного пользования!",
+                                               show_alert=True)
 
         @self.bot.callback_query_handler(func=lambda call: True)
         def handle_inline_buttons(call):
@@ -268,7 +273,7 @@ class GameFinderBot:
             if not self.is_user_banned(user_id):
                 current_time = time.time()
                 cur = self.con.cursor()
-                if user_id in self.last_button_click and current_time - self.last_button_click[user_id] < 5:
+                if user_id in self.last_button_click and current_time - self.last_button_click[user_id] < 3:
                     self.bot.answer_callback_query(call.id,
                                                    text="Подождите немного перед следующим нажатием кнопки.",
                                                    show_alert=True)
@@ -592,7 +597,7 @@ class GameFinderBot:
             except Exception:
                 pass
             game = game
-            keyboard = types.InlineKeyboardMarkup(row_width=2)
+            keyboard = types.InlineKeyboardMarkup(row_width=1)
             like_button = types.InlineKeyboardButton(text="Лайк", callback_data=f"like_{user_id}_{game}")
             dislike_button = types.InlineKeyboardButton(text="Пропустить", callback_data=f"dislike_{user_id}_{game}")
             report_button = types.InlineKeyboardButton(text="Report", callback_data=f"report_{user_id}_{game}")
