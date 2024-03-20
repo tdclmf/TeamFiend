@@ -45,6 +45,7 @@ def get_desc_kb():
 
 def log_action(user_id, action):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"{timestamp} - User {user_id}: {action}\n")
     with open("bot_logs.txt", "a") as log_file:
         log_file.write(f"{timestamp} - User {user_id}: {action}\n")
 
@@ -204,7 +205,9 @@ class GameFinderBot:
                     if user_id != cur_id[0]:
                         self.create_profile(message, "CS2")
                     else:
-                        self.show_random_profile(message, "CS2", None, None)
+                        if cur_id[0]:
+                            self.bot.send_message(message.chat.id, "Выберите действие:",
+                                                  reply_markup=get_profile_actions_keyboard("CS2"))
                         cur.close()
                 except TypeError:
                     self.create_profile(message, "CS2")
@@ -222,10 +225,11 @@ class GameFinderBot:
                     if user_id != cur_id[0]:
                         self.create_profile(message, "Rust")
                     else:
-                        self.show_random_profile(message, "rust", None, None)
+                        self.bot.send_message(message.chat.id, "Выберите действие:",
+                                              reply_markup=get_profile_actions_keyboard("Rust"))
                         cur.close()
                 except TypeError:
-                    self.create_profile(message, "rust")
+                    self.create_profile(message, "Rust")
 
         @self.bot.message_handler(commands=['ban'])
         def handle_ban(message):
@@ -361,6 +365,7 @@ class GameFinderBot:
             log_action(message.from_user.id, "Getting description")
             if message.text == "Вернуться":
                 self.returned(message)
+                return
             user_profile['id'] = user_id
             user_profile['description'] = message.text
             user_id = message.from_user.id
@@ -389,6 +394,7 @@ class GameFinderBot:
         if not self.is_user_banned(user_id):
             if message.text == "Вернуться":
                 self.returned(message)
+                return
             if game == "dota 2":
                 self.bot.send_message(user_id, "Что вы хотите изменить в своем профиле?",
                                       reply_markup=get_dota_edits_keyboard())
@@ -398,7 +404,7 @@ class GameFinderBot:
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
             if message.text == "Описание":
-                self.bot.send_message(user_id, "Введите новое описание:")
+                self.bot.send_message(user_id, "Введите новое описание:", reply_markup=get_desc_kb())
                 self.bot.register_next_step_handler(message, self.edit_profile_description, game)
             if message.text == "Ранг":
                 self.bot.send_message(user_id, "Выберите новый ранг:", reply_markup=self.get_rank_keyboard())
@@ -411,6 +417,9 @@ class GameFinderBot:
     def edit_profile_description(self, message, game):
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
+            if message == "Вернуться":
+                self.returned(message)
+                return
             new_description = message.text
             cur = self.con.cursor()
             cur.execute("UPDATE Games SET desc=? WHERE id=? AND game=?", (new_description, user_id, game,))
@@ -465,6 +474,9 @@ class GameFinderBot:
     def get_rank_dota(self, message, user_profile):
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
+            if message.text == "Вернуться":
+                self.returned(message)
+                return
             if message.text in self.ranks:
                 user_profile['rank'] = message.text
                 self.bot.send_message(user_id, "Выберите цель поиска:", reply_markup=self.get_search_goal_keyboard())
@@ -482,6 +494,9 @@ class GameFinderBot:
     def get_search_goal(self, message, user_profile):
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
+            if message.text == "Вернуться":
+                self.returned(message)
+                return
             if message.text in self.search_goals:
                 user_profile['search_goal'] = message.text
                 self.bot.send_message(user_id, "Анкета создана! Теперь вы можете начать поиск напарников.",
@@ -588,9 +603,6 @@ class GameFinderBot:
                 message_text = f"**Описание:** {description}\n**Игра:** {game.capitalize()}"
             self.bot.send_message(chat_id, message_text, reply_markup=keyboard, parse_mode='Markdown')
 
-    # def returned(self, user_id):
-    #   self.bot.send_message()
-
     def get_profile_by_id(self, profile_id, game):
         cursor = self.con.cursor()
         cursor.execute('SELECT * FROM Games WHERE game=? AND id=? LIMIT 1', (game, profile_id,))
@@ -613,7 +625,7 @@ class GameFinderBot:
                                            f'Игра: {liked_profile[0].capitalize()}\nОписание: {liked_profile[2]}!')
             self.bot.send_message(liked_user_id, f'Ура! Вы взаимно лайкнулись с пользователем '
                                                  f'@{self.bot.get_chat(user_id).username}!\n'
-                                                 f'Игра: {user[0].capitalize()}\nОписание: {user[1]}!')
+                                                 f'Игра: {user[0].capitalize()}\nОписание: {user[2]}!')
             cursor.execute("DELETE FROM Matches WHERE user_id=? or liked_user_id=?", (user_id, user_id,))
             self.con.commit()
         else:
