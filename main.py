@@ -253,7 +253,7 @@ class GameFinderBot:
 
         @self.bot.callback_query_handler(func=lambda call: call.data == "accept_rules")
         def accept_rules_callback(call):
-            if not is_rules_accepted(message.from_user.id):
+            if not is_rules_accepted(call.from_user.id):
                 self.bot.answer_callback_query(call.id, "")
                 user_id = call.from_user.id
                 add_user_to_accepted_rules(user_id)
@@ -371,6 +371,10 @@ class GameFinderBot:
             if message.text == "Вернуться":
                 self.returned(message)
                 return
+            if not message.text:
+                self.bot.send_message(user_id, "Это не похоже на текст сообщения... ")
+                self.bot.send_message(user_id, "Опишите себя и свою цель поиска:")
+                self.bot.register_next_step_handler(message, self.get_description, user_profile)
             user_profile['id'] = user_id
             user_profile['description'] = message.text
             user_id = message.from_user.id
@@ -422,6 +426,10 @@ class GameFinderBot:
     def edit_profile_description(self, message, game):
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
+            if not message.text:
+                self.bot.send_message(user_id, "Это не похоже на текст сообщения... ")
+                self.bot.send_message(user_id, "Опишите себя и свою цель поиска:")
+                self.bot.register_next_step_handler(message, self.edit_profile_description, user_profile)
             if message == "Вернуться":
                 self.returned(message)
                 return
