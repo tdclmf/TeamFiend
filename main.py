@@ -371,32 +371,34 @@ class GameFinderBot:
             if message.text == "Вернуться":
                 self.returned(message)
                 return
-            if not message.text:
+            print('Вошел...')
+            if message.text:
+                user_profile['id'] = user_id
+                user_profile['description'] = message.text
+                user_id = message.from_user.id
+                user = message.from_user
+                user_profile['username'] = user.username
+                if user_profile['game'] == "dota 2":
+                    self.bot.send_message(user_id, "Выберите свой ранг:", reply_markup=self.get_rank_keyboard())
+                    self.bot.register_next_step_handler(message, self.get_rank_dota, user_profile)
+                else:
+                    cur = self.con.cursor()
+                    try:
+                        sqlite_insert_query = """INSERT INTO Games
+                                                    (game, id, desc, tg_profile)
+                                                    VALUES
+                                                    (?, ?, ?, ?);"""
+                        column_values = (tuple(user_profile.values()))
+                        cur.execute(sqlite_insert_query, column_values)
+                        self.con.commit()
+                    except Exception:
+                        self.con.rollback()
+                    cur.close()
+                    self.show_random_profile(message, user_profile["game"], None, None)
+            else:
                 self.bot.send_message(user_id, "Это не похоже на текст сообщения... ")
                 self.bot.send_message(user_id, "Опишите себя и свою цель поиска:")
                 self.bot.register_next_step_handler(message, self.get_description, user_profile)
-            user_profile['id'] = user_id
-            user_profile['description'] = message.text
-            user_id = message.from_user.id
-            user = message.from_user
-            user_profile['username'] = user.username
-            if user_profile['game'] == "dota 2":
-                self.bot.send_message(user_id, "Выберите свой ранг:", reply_markup=self.get_rank_keyboard())
-                self.bot.register_next_step_handler(message, self.get_rank_dota, user_profile)
-            else:
-                cur = self.con.cursor()
-                try:
-                    sqlite_insert_query = """INSERT INTO Games
-                                                (game, id, desc, tg_profile)
-                                                VALUES
-                                                (?, ?, ?, ?);"""
-                    column_values = (tuple(user_profile.values()))
-                    cur.execute(sqlite_insert_query, column_values)
-                    self.con.commit()
-                except Exception:
-                    self.con.rollback()
-                cur.close()
-                self.show_random_profile(message, user_profile["game"], None, None)
 
     def edit_profile(self, message, game):
         user_id = message.from_user.id
@@ -426,19 +428,20 @@ class GameFinderBot:
     def edit_profile_description(self, message, game):
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
-            if not message.text:
+            if message.text:
+                if message == "Вернуться":
+                    self.returned(message)
+                    return
+                new_description = message.text
+                cur = self.con.cursor()
+                cur.execute("UPDATE Games SET desc=? WHERE id=? AND game=?", (new_description, user_id, game,))
+                self.con.commit()
+                cur.close()
+                self.bot.send_message(user_id, "Профиль успешно обновлен.", reply_markup=types.ReplyKeyboardRemove())
+            else:
                 self.bot.send_message(user_id, "Это не похоже на текст сообщения... ")
                 self.bot.send_message(user_id, "Опишите себя и свою цель поиска:")
                 self.bot.register_next_step_handler(message, self.edit_profile_description, user_profile)
-            if message == "Вернуться":
-                self.returned(message)
-                return
-            new_description = message.text
-            cur = self.con.cursor()
-            cur.execute("UPDATE Games SET desc=? WHERE id=? AND game=?", (new_description, user_id, game,))
-            self.con.commit()
-            cur.close()
-            self.bot.send_message(user_id, "Профиль успешно обновлен.", reply_markup=types.ReplyKeyboardRemove())
 
     def edit_dota_rank(self, message):
         user_id = message.from_user.id
@@ -487,6 +490,7 @@ class GameFinderBot:
     def get_rank_dota(self, message, user_profile):
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
+            log_action(message.from_user.id, "get_rank executed")
             if message.text == "Вернуться":
                 self.returned(message)
                 return
@@ -495,6 +499,8 @@ class GameFinderBot:
                 self.bot.send_message(user_id, "Выберите цель поиска:", reply_markup=self.get_search_goal_keyboard())
                 self.bot.register_next_step_handler(message, self.get_search_goal, user_profile)
             else:
+                self.bot.send_message(user_id, "Кажется, такого варианта нет...")
+                log_action(message.from_user.id, "rank isnt defined")
                 self.bot.send_message(user_id, "Кажется, такого варианта нет...")
                 self.bot.register_next_step_handler(message, self.get_rank_dota, user_profile)
 
