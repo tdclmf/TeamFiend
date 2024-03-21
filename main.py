@@ -315,8 +315,12 @@ class GameFinderBot:
                                              search_goal=(res[5] if len(res) == 6 else None),
                                              rank=(res[4] if len(res) == 6 else None))
                     self.bot.answer_callback_query(call.id, "")
-
-        self.bot.polling(none_stop=True)
+        while True:
+            try:
+                self.bot.polling(none_stop=True)
+            except Exception as e:
+                print(e)
+                time.sleep(3)
 
     def ban_user(self, user_id):
         if not self.is_user_banned(user_id):
@@ -371,8 +375,7 @@ class GameFinderBot:
             if message.text == "Вернуться":
                 self.returned(message)
                 return
-            print('Вошел...')
-            if message.text:
+            if message.text and len(message.text) <= 4000:
                 user_profile['id'] = user_id
                 user_profile['description'] = message.text
                 user_id = message.from_user.id
@@ -396,7 +399,7 @@ class GameFinderBot:
                     cur.close()
                     self.show_random_profile(message, user_profile["game"], None, None)
             else:
-                self.bot.send_message(user_id, "Это не похоже на текст сообщения... ")
+                self.bot.send_message(user_id, "Это не текстовое сообщение или сообщение более 4000 символов...")
                 self.bot.send_message(user_id, "Опишите себя и свою цель поиска:")
                 self.bot.register_next_step_handler(message, self.get_description, user_profile)
 
@@ -428,7 +431,7 @@ class GameFinderBot:
     def edit_profile_description(self, message, game):
         user_id = message.from_user.id
         if not self.is_user_banned(user_id):
-            if message.text:
+            if message.text and len(message.text) <= 4000:
                 if message == "Вернуться":
                     self.returned(message)
                     return
@@ -439,7 +442,7 @@ class GameFinderBot:
                 cur.close()
                 self.bot.send_message(user_id, "Профиль успешно обновлен.", reply_markup=types.ReplyKeyboardRemove())
             else:
-                self.bot.send_message(user_id, "Это не похоже на текст сообщения... ")
+                self.bot.send_message(user_id, "Это не текстовое сообщение или сообщение более 4000 символов...")
                 self.bot.send_message(user_id, "Опишите себя и свою цель поиска:")
                 self.bot.register_next_step_handler(message, self.edit_profile_description, user_profile)
 
