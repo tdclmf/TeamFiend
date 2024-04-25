@@ -89,6 +89,7 @@ class GameFinderBot:
                 item_cs2 = types.KeyboardButton("CS2")
                 item_rust = types.KeyboardButton("Rust")
                 markup.add(item_dota2, item_cs2, item_rust)
+                markup.add(types.KeyboardButton("Brawl Stars"))
                 self.bot.send_message(message.chat.id, "Привет! Давай начнем поиск напарников. Выбери игру:",
                                       reply_markup=markup)
 
@@ -167,10 +168,16 @@ class GameFinderBot:
                 self.show_random_profile(message, "CS2", None, None)
 
         @self.bot.message_handler(func=lambda message: message.text == "Начать поиск Rust")
-        def start_search_cs(message):
+        def start_search_rust(message):
             if not self.is_user_banned(message.from_user.id):
                 self.bot.send_message(message.from_user.id, "Секунду...", reply_markup=types.ReplyKeyboardRemove())
                 self.show_random_profile(message, "Rust", None, None)
+
+        @self.bot.message_handler(func=lambda message: message.text == "Начать поиск Brawl Stars")
+        def start_search_brawl(message):
+            if not self.is_user_banned(message.from_user.id):
+                self.bot.send_message(message.from_user.id, "Секунду...", reply_markup=types.ReplyKeyboardRemove())
+                self.show_random_profile(message, "Brawl Stars", None, None)
 
         @self.bot.message_handler(func=lambda message: message.text == "Dota 2")
         def handle_dota2(message):
@@ -231,6 +238,43 @@ class GameFinderBot:
                 except TypeError:
                     self.create_profile(message, "Rust")
 
+        @self.bot.message_handler(func=lambda message: message.text == "Brawl Stars")
+        def handle_brawl_stars(message):
+            user_id = message.from_user.id
+            if not is_rules_accepted(user_id):
+                self.not_accept(message)
+                return
+            if not self.is_user_banned(user_id):
+                cur = self.con.cursor()
+                cur_id = cur.execute('SELECT id FROM Games WHERE id = ? AND game = ?',
+                                     (user_id, "Brawl Stars")).fetchone()
+                try:
+                    if user_id != cur_id[0]:
+                        self.create_profile(message, "Brawl Stars")
+                    else:
+                        self.bot.send_message(message.chat.id, "Выберите действие:",
+                                              reply_markup=get_profile_actions_keyboard("Brawl Stars"))
+                        cur.close()
+                except TypeError:
+                    self.create_profile(message, "Brawl Stars")
+
+        @self.bot.message_handler(func=lambda message: message.text == "Редактировать профиль Brawl Stars")
+        def handle_edit_brawl_profile(message):
+            if not is_rules_accepted(message.from_user.id):
+                not_accept(message)
+                return
+            if not self.is_user_banned(message.from_user.id):
+                print(123)
+                self.edit_profile(message, "Brawl Stars")
+
+        @self.bot.message_handler(func=lambda message: message.text == "Удалить профиль Brawl Stars")
+        def handle_delete_brawl_profile(message):
+            if not is_rules_accepted(message.from_user.id):
+                self.not_accept(message)
+                return
+            if not self.is_user_banned(message.from_user.id):
+                self.delete_profile(message, "Brawl Stars")
+
         @self.bot.message_handler(commands=['ban'])
         def handle_ban(message):
             if message.from_user.id in self.admins:
@@ -281,10 +325,17 @@ class GameFinderBot:
                 self.last_button_click[user_id] = current_time
                 profile_id = int(call.data.split('_')[-2])
                 if call.data.startswith("like"):
+                    cur_res = cur.execute('SELECT * FROM Games WHERE id = ? AND game = ?',
+                                          (user_id, call.data.split('_')[-1])).fetchone()
+                    cur.close()
                     liked_profile = self.get_profile_by_id(profile_id, call.data.split('_')[-1])
+                    print(call.data)
                     if liked_profile:
                         if not self.check_if_already_liked(user_id, liked_profile):
                             self.send_matched_profiles(user_id, liked_profile)
+                            self.show_random_profile(message=call.message, game=call.data.split('_')[-1],
+                                                     search_goal=cur_res[5],
+                                                     rank=cur_res[4])
                             self.bot.answer_callback_query(call.id, "")
                         else:
                             self.bot.answer_callback_query(call.id,
@@ -315,12 +366,21 @@ class GameFinderBot:
                                              search_goal=(res[5] if len(res) == 6 else None),
                                              rank=(res[4] if len(res) == 6 else None))
                     self.bot.answer_callback_query(call.id, "")
+
+        e = None
         while True:
             try:
+                if e:
+                    for i in self.admins:
+                        self.bot.send_message(i, f"Произошла ошибка!\n{e}")
+                        e = None
                 self.bot.polling(none_stop=True)
             except Exception as e:
-                print(e)
-                time.sleep(3)
+                try:
+                    print(e)
+                    time.sleep(3)
+                except Exception:
+                    time.sleep(3)
 
     def ban_user(self, user_id):
         if not self.is_user_banned(user_id):
@@ -413,6 +473,10 @@ class GameFinderBot:
                 self.bot.send_message(user_id, "Что вы хотите изменить в своем профиле?",
                                       reply_markup=get_dota_edits_keyboard())
                 self.bot.register_next_step_handler(message, self.choice, game)
+            else:
+                self.bot.send_message(user_id, "Введите новое описание:", reply_markup=get_desc_kb())
+                self.bot.register_next_step_handler(message, self.edit_profile_description, game)
+
 
     def choice(self, message, game):
         user_id = message.from_user.id
